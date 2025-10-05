@@ -39,9 +39,9 @@ def convert_site1(data_in: dict[str, list[dict[str, str]]]) -> str:  # noqa
     if data_in == {}:
         return data_out
     for key, value in data_in.items():
-        data_out += ' Департамент: ' + key + '\n'
+        data_out += ' ' + os.getenv('SITE12_STR3') + ': ' + key + '\n'
         for vac in value:
-            data_out += '  Вакансия:' + '\n'
+            data_out += '  ' + os.getenv('SITE12_STR4') + ': ' + '\n'
             for key2, value2 in vac.items():
                 data_out += '   ' + key2 + ': ' + value2 + '\n'
     return data_out
@@ -51,8 +51,8 @@ def site1(from_server: requests.Response):  # noqa
     """."""
     # Список интересующих констант данного сайта
     ITEMS_OF_INTEREST_NAMES = [  # noqa
-        'Департамент информационных технологий',
-        'Департамент конкурентной политики и политики в области государственных закупок'  # noqa
+        str(os.getenv('SITE12_STR1')),
+        str(os.getenv('SITE12_STR2'))
     ]
     all_depts_vacs = {}
     soup2 = BeautifulSoup(from_server.text, features='lxml')
@@ -111,7 +111,7 @@ def site2(from_server: requests.Response):  # noqa
 def site3(from_server: requests.Response):  # noqa
     """."""
     soup3 = BeautifulSoup(from_server.text, features='lxml')
-    temp3_1 = soup3.find(name='select', attrs={'title': 'Список марш-бросков'})  # noqa
+    temp3_1 = soup3.find(name='select', attrs={'title': os.getenv('SITE3_STR1')})  # noqa
     return temp3_1.find().text  # type: ignore
 
 
@@ -191,12 +191,17 @@ def main():
             os.getenv('SITE2_DELTA_M'),
             os.getenv('SITE2_DELTA_S'),
             os.getenv('SITE2_NIGHT'),
+            os.getenv('SITE12_STR1'),
+            os.getenv('SITE12_STR2'),
+            os.getenv('SITE12_STR3'),
+            os.getenv('SITE12_STR4'),
             os.getenv('SITE3_URL'),
             os.getenv('SITE3_LABEL'),
             os.getenv('SITE3_DELTA_S'),
             os.getenv('SITE3_DELTA_M'),
             os.getenv('SITE3_DELTA_S'),
             os.getenv('SITE3_NIGHT'),
+            os.getenv('SITE3_STR1'),
         ]):
             raise Exception
     except Exception:
@@ -234,11 +239,11 @@ def main():
         #        minutes=int(os.getenv('SITE3_DELTA_M')),  # период проверки сайта3  # noqa
         #        seconds=int(os.getenv('SITE3_DELTA_S'))  # период проверки сайта3  # noqa
         #    ),
-        #     os.getenv('SITE3_LABEL'),  # лабел сайта3
-        #     site3,  # функция распарсивания по сайту3
-        #     os.getenv('SITE3_URL'),  # URL сайта3
-        #     os.getenv('SITE3_NIGHT').lower() == 'true',  # надо ли парсить сайт3 ночью  # noqa
-        # ]
+        #    os.getenv('SITE3_LABEL'),  # лабел сайта3
+        #    site3,  # функция распарсивания по сайту3
+        #    os.getenv('SITE3_URL'),  # URL сайта3
+        #    os.getenv('SITE3_NIGHT').lower() == 'true',  # надо ли парсить сайт3 ночью  # noqa
+        # ],
     ]
 
     try:
@@ -254,13 +259,14 @@ def main():
 
     while True:
         for item in SITES_ARRAY:
-            now_moment = datetime.datetime.now()
-            if (now_moment.time() > datetime.time(18, 0, 0) or
-               now_moment.time() < datetime.time(9, 0, 0)):
-                is_night = True
+            now_moment = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3)))  # noqa
+
+            if (5 <= now_moment.weekday() <= 6 or
+                datetime.time(9, 0, 0) <= now_moment.time() <= datetime.time(18, 0, 0)):  # noqa
+                is_night_or_weekend = True
             else:
-                is_night = False
-            if is_night and not item[4]:
+                is_night_or_weekend = False
+            if is_night_or_weekend and not item[4]:
                 time.sleep(1)
                 continue
             # logging.info(f'Очередной момент времени {now_moment=}')
