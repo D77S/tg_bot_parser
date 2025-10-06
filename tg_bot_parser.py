@@ -122,7 +122,7 @@ def startup(SITES_ARRAY):
     for item in SITES_ARRAY:
         from_server = get_response(item[3])
         start_item = item[2](from_server)
-        now_moment = datetime.datetime.now()
+        now_moment = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3)))  # noqa
         results_storage[item[1]] = {
             'moment': now_moment,
             'data': start_item
