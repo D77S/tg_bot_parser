@@ -6,7 +6,7 @@ import requests
 import sys
 import time
 import telegram
-from bs4 import BeautifulSoup, ResultSet, element
+from bs4 import BeautifulSoup, ResultSet, element, Tag
 from dotenv import load_dotenv
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -18,33 +18,12 @@ from tenacity import (
 )
 
 
-# class TokensException(Exception):
-#     """Кастомное исключение по отсутствию токенов."""
-#     def __init__(self, message=None):
-#         super().__init__(message)
-#         print(message)
-
-
 def get_response(url):
     """."""
     response = requests.get(url, timeout=30)
     response.raise_for_status()
     response.encoding = 'utf-8'
     return response
-
-
-def convert_site1(data_in: dict[str, list[dict[str, str]]]) -> str:  # noqa
-    """."""
-    data_out = ''
-    if data_in == {}:
-        return data_out
-    for key, value in data_in.items():
-        data_out += ' ' + os.getenv('SITE12_STR3') + ': ' + key + '\n'
-        for vac in value:
-            data_out += '  ' + os.getenv('SITE12_STR4') + ': ' + '\n'
-            for key2, value2 in vac.items():
-                data_out += '   ' + key2 + ': ' + value2 + '\n'
-    return data_out
 
 
 def site1(from_server: requests.Response):  # noqa
@@ -84,7 +63,17 @@ def site1(from_server: requests.Response):  # noqa
         if curr_dept_name_text in ITEMS_OF_INTEREST_NAMES:
             all_depts_vacs[curr_dept_name_text] = curr_dept_vacancies_list
 
-    return convert_site1(all_depts_vacs)
+    data_out = ''
+    if all_depts_vacs == {}:
+        return data_out
+    for key, value in all_depts_vacs.items():
+        data_out += ' ' + os.getenv('SITE12_STR3') + ': ' + key + '\n'
+        for vac in value:
+            data_out += '  ' + os.getenv('SITE12_STR4') + ': ' + '\n'
+            for key2, value2 in vac.items():
+                data_out += '   ' + key2 + ': ' + value2 + '\n'
+
+    return data_out
 
 
 def site2(from_server: requests.Response):  # noqa
@@ -130,6 +119,78 @@ def startup(SITES_ARRAY):
     return results_storage
 
 
+def site33():
+    """Выполняет действия, к-е надо сделать по обнаружении
+    изменения по сайт3."""
+    MAIN_URL = os.getenv('SITE3_URL')
+    USER1_EMAIL = os.getenv('SITE3_USER1_EMAIL')
+    post_data = {
+        'Login': USER1_EMAIL,
+        'Password': '24182418',
+        'action': 'UserLogin',
+        'view': 'MainPage',
+        'RegisterButton': 'Вход'
+    }
+    session = requests.session()
+    response = session.post(url=MAIN_URL, data=post_data)
+    response = session.get(url=MAIN_URL)
+    soup = BeautifulSoup(response.text, features='lxml')
+    mb_table: Tag = soup.find(name='td', string='Марш-бросок').parent.parent  # noqa
+    curr_mb_link_part: str = str(mb_table.find_all(name='a')[1].get('href'))
+
+    counter_command = 0
+
+    while counter_command < 1:  # хотим, чтобы была одна. Мы хотим получить номер 2, если успеем.  # noqa
+        time.sleep(3)
+        params = {
+            'RaidId': curr_mb_link_part.split('=')[1],
+        }
+        response_currmmb = session.get(url=MAIN_URL, params=params)
+        soup = BeautifulSoup(response_currmmb.text, features='lxml')
+        try:
+            temp3: Tag = soup.find(string='Участники').parent.parent.parent
+            temp4 = temp3.find_all(name='a')[0]
+            counter_command = int(temp4.get('name'))
+        except Exception:
+            counter_command = 0
+
+    post_data = {
+        'action': 'RegisterNewTeam',
+        'view': 'ViewRaidTeams',
+        'DistanceId': '0',
+        'RaidId': curr_mb_link_part.split('=')[1],
+        'TeamNum': 'Номер команды'
+    }
+    response_currcommand = session.post(url=MAIN_URL, data=post_data)
+    soup = BeautifulSoup(response_currcommand.text, features='lxml')
+    dist_id = str(soup.find(name='select', attrs={'name': 'DistanceId'}).find(name='option').get('value'))  # noqa
+    post_data = {
+        'action': 'AddTeam',
+        'TeamId': '0',
+        'RaidId': curr_mb_link_part.split('=')[1],
+        'HideTeamUserId': '0',
+        'UserOutLevelId': '0',
+        'UserNotInLevelPointId': '0',
+        'UserId': '0',
+        'NewTeamUserEmail': USER1_EMAIL,
+        'TeamNum': '0',
+        'DistanceId': dist_id,
+        'TeamName': 'by_def',
+        'TeamUseGPS': 'on',
+        'TeamMapsCount': '2',
+        'Confirmation': 'on',
+        'view': 'ViewTeamData'
+    }
+    params = {
+        'RaidId': curr_mb_link_part.split('=')[1],
+    }
+    # Главный запрос!!!!!!!!!!!!
+    response_currcommand = session.post(url=MAIN_URL, data=post_data, params=params)  # noqa
+    if response_currcommand.status_code == 200:
+        return 'Команда зарегана'
+    return None
+
+
 def configure_logging():
     """."""
     LOG_FORMAT = '"%(asctime)s - [%(levelname)s] - %(message)s"'
@@ -140,8 +201,8 @@ def configure_logging():
     log_file = log_dir / 'parser.log'
     rotating_handler = RotatingFileHandler(
         log_file,
-        maxBytes=10 ** 6,
-        backupCount=10,
+        maxBytes=10 ** 5,
+        backupCount=3,
         # encoding='utf-8'
     )
     logging.basicConfig(
@@ -167,7 +228,7 @@ def main():
         ]):
             raise Exception
     except Exception:
-        error_msg = 'Ошибка, отсутствуют две переменные окружения по тг-боту'
+        error_msg = 'Критическая ошибка, отсутствуют две переменные окружения по тг-боту, выход'  # noqa
         logging.error(error_msg)
         sys.exit()
 
@@ -185,12 +246,16 @@ def main():
             os.getenv('SITE1_DELTA_M'),
             os.getenv('SITE1_DELTA_S'),
             os.getenv('SITE1_NIGHT'),
+            os.getenv('SITE1_ALARM'),
+            os.getenv('SITE1_SWITCH'),
             os.getenv('SITE2_URL'),
             os.getenv('SITE2_LABEL'),
             os.getenv('SITE2_DELTA_H'),
             os.getenv('SITE2_DELTA_M'),
             os.getenv('SITE2_DELTA_S'),
             os.getenv('SITE2_NIGHT'),
+            os.getenv('SITE2_ALARM'),
+            os.getenv('SITE2_SWITCH'),
             os.getenv('SITE12_STR1'),
             os.getenv('SITE12_STR2'),
             os.getenv('SITE12_STR3'),
@@ -201,11 +266,18 @@ def main():
             os.getenv('SITE3_DELTA_M'),
             os.getenv('SITE3_DELTA_S'),
             os.getenv('SITE3_NIGHT'),
+            os.getenv('SITE3_ALARM'),
+            os.getenv('SITE3_SWITCH'),
             os.getenv('SITE3_STR1'),
+            os.getenv('SITE3_USER1_EMAIL'),
+            os.getenv('SITE3_USER1_PASS'),
+            os.getenv('SITE3_USER2_EMAIL'),
+            os.getenv('SITE3_USER2_PASS'),
+
         ]):
             raise Exception
     except Exception:
-        error_msg = 'Ошибка, отсутствуют переменные окружения'
+        error_msg = 'Критическая ошибка, отсутствуют какие-то переменные окружения, выход'  # noqa
         bot.send_message(CHAT_ID, error_msg)
         logging.error(error_msg)
         sys.exit()
@@ -213,37 +285,46 @@ def main():
     SITES_ARRAY = [
         [
             datetime.timedelta(
-                hours=int(os.getenv('SITE1_DELTA_H')),  # период проверки сайта1  # noqa
-                minutes=int(os.getenv('SITE1_DELTA_M')),  # период проверки сайта1  # noqa
-                seconds=int(os.getenv('SITE1_DELTA_S'))  # период проверки сайта1  # noqa
+                hours=int(os.getenv('SITE1_DELTA_H')),  # периодичность работы с сайт1  # noqa
+                minutes=int(os.getenv('SITE1_DELTA_M')),  # периодичность работы с сайт1  # noqa
+                seconds=int(os.getenv('SITE1_DELTA_S'))  # периодичность работы с сайт1  # noqa
             ),
-            os.getenv('SITE1_LABEL'),  # лабел сайта1
-            site1,  # функция распарсивания по сайту1
-            os.getenv('SITE1_URL'),  # URL сайта1
-            os.getenv('SITE1_NIGHT').lower() == 'true',  # надо ли парсить сайт1 ночью  # noqa
-            ],
+            os.getenv('SITE1_LABEL'),  # лабел сайт1
+            site1,  # функция работы по сайт1
+            os.getenv('SITE1_URL'),  # URL сайт1
+            os.getenv('SITE1_NIGHT').lower() == 'true',  # надо ли работать с сайт1 ночью  # noqa
+            os.getenv('SITE1_SWITCH').lower() == 'true',  # надо ли вообще работать с сайт1  # noqa
+            os.getenv('SITE1_ALARM').lower() == 'true',  # надо ли что-то делать по обнаружении изменений сайт1  # noqa
+            None,
+        ],
         [
             datetime.timedelta(
-                hours=int(os.getenv('SITE2_DELTA_H')),  # период проверки сайта2  # noqa
-                minutes=int(os.getenv('SITE2_DELTA_M')),  # период проверки сайта2  # noqa
-                seconds=int(os.getenv('SITE2_DELTA_S'))  # период проверки сайта2  # noqa
+                hours=int(os.getenv('SITE2_DELTA_H')),  # периодичность работы с сайт2  # noqa
+                minutes=int(os.getenv('SITE2_DELTA_M')),  # периодичность работы с сайт2  # noqa
+                seconds=int(os.getenv('SITE2_DELTA_S'))  # периодичность работы с сайт2  # noqa
             ),
-            os.getenv('SITE2_LABEL'),  # лабел сайта2
-            site2,  # функция распарсивания по сайту2
-            os.getenv('SITE2_URL'),  # URL сайта2
-            os.getenv('SITE2_NIGHT').lower() == 'true',  # надо ли парсить сайт2 ночью  # noqa
-            ],
-        # [
-        #    datetime.timedelta(
-        #        hours=int(os.getenv('SITE3_DELTA_H')),  # период проверки сайта3  # noqa
-        #        minutes=int(os.getenv('SITE3_DELTA_M')),  # период проверки сайта3  # noqa
-        #        seconds=int(os.getenv('SITE3_DELTA_S'))  # период проверки сайта3  # noqa
-        #    ),
-        #    os.getenv('SITE3_LABEL'),  # лабел сайта3
-        #    site3,  # функция распарсивания по сайту3
-        #    os.getenv('SITE3_URL'),  # URL сайта3
-        #    os.getenv('SITE3_NIGHT').lower() == 'true',  # надо ли парсить сайт3 ночью  # noqa
-        # ],
+            os.getenv('SITE2_LABEL'),  # лабел сайт2
+            site2,  # функция работы по сайт2
+            os.getenv('SITE2_URL'),  # URL сайт2
+            os.getenv('SITE2_NIGHT').lower() == 'true',  # надо ли работать с сайт2 ночью  # noqa
+            os.getenv('SITE2_SWITCH').lower() == 'true',  # надо ли вообще работать с сайт2  # noqa
+            os.getenv('SITE2_ALARM').lower() == 'true',  # надо ли что-то делать по обнаружении изменений сайт2  # noqa
+            None,
+        ],
+        [
+            datetime.timedelta(
+                hours=int(os.getenv('SITE3_DELTA_H')),  # периодичность работы с сайт3  # noqa
+                minutes=int(os.getenv('SITE3_DELTA_M')),  # периодичность работы с сайт3  # noqa
+                seconds=int(os.getenv('SITE3_DELTA_S'))  # периодичность работы с сайт3  # noqa
+            ),
+            os.getenv('SITE3_LABEL'),  # лабел сайт3
+            site3,  # функция работы по сайт3
+            os.getenv('SITE3_URL'),  # URL сайт3
+            os.getenv('SITE3_NIGHT').lower() == 'true',  # надо ли работать с сайт3 ночью  # noqa
+            os.getenv('SITE3_SWITCH').lower() == 'true',  # надо ли вообще работать с сайт3  # noqa
+            os.getenv('SITE3_ALARM').lower() == 'true',  # надо ли что-то делать по обнаружении изменений сайт3  # noqa
+            site33,
+        ],
     ]
 
     try:
@@ -259,17 +340,22 @@ def main():
 
     while True:
         for item in SITES_ARRAY:
+
+            if item[5] is False:
+                continue
+
             now_moment = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=3)))  # noqa
 
-            if (5 <= now_moment.weekday() <= 6 or
-                datetime.time(9, 0, 0) <= now_moment.time() <= datetime.time(18, 0, 0)):  # noqa
+            if (5 <= now_moment.weekday() <= 6) or (datetime.time(9, 0, 0) <= now_moment.time() <= datetime.time(18, 0, 0)):  # noqa
                 is_night_or_weekend = True
             else:
                 is_night_or_weekend = False
-            if is_night_or_weekend and not item[4]:
-                time.sleep(1)
+
+            if is_night_or_weekend and item[4] is False:
                 continue
+
             # logging.info(f'Очередной момент времени {now_moment=}')
+
             if now_moment >= results_storage[item[1]]['moment'] + item[0]:  # noqa
                 logging.info(f'Начаты действия с сайтом {item[1]}')
                 result_old_data = results_storage[item[1]]['data']
@@ -313,6 +399,15 @@ def main():
                         bot.send_message(CHAT_ID, data_out)
                         logging.info(f'По сайту {item[1]} изменения есть')
                         results_storage[item[1]]['data'] = result_new_data
+                        #  Если поднят соотв.флаг, то надо выполнить то, что по обнаружении изменений  # noqa
+                        if item[6]:
+                            answ = item[7]()
+                            if answ is not None:
+                                bot.send_message(CHAT_ID, answ)
+
+                        # По сайт3, его надо отслеживать лишь однократно, до след.перезапуска программы  # noqa
+                        if item[1] == os.getenv('SITE3_LABEL'):
+                            item[5] = False
 
                     results_storage[item[1]]['moment'] = now_moment
 
