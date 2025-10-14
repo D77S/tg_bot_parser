@@ -124,9 +124,10 @@ def site33():
     изменения по сайт3."""
     MAIN_URL = os.getenv('SITE3_URL')
     USER1_EMAIL = os.getenv('SITE3_USER1_EMAIL')
+    USER1_PASS = os.getenv('SITE3_USER1_PASS')
     post_data = {
         'Login': USER1_EMAIL,
-        'Password': '24182418',
+        'Password': USER1_PASS,
         'action': 'UserLogin',
         'view': 'MainPage',
         'RegisterButton': 'Вход'
