@@ -17,6 +17,11 @@ from tenacity import (
     wait_exponential
 )
 
+#  !!!!!!!!!!!!!!!!!!!!
+TG_ON: bool = True
+LOG_ON: bool = False
+#  !!!!!!!!!!!!!!!!!!!
+
 
 def get_response(url):
     """."""
@@ -113,7 +118,8 @@ def startup(SITES_ARRAY):
         now_moment = datetime.datetime.now().astimezone()  # noqa
         results_storage[item[1]] = {
             'moment': now_moment,
-            'data': start_item
+            'data': start_item,
+            'counter': 1
         }
     return results_storage
 
@@ -244,9 +250,8 @@ def main():
     """."""
     load_dotenv()
     configure_logging()
-    #  !!!!!!!!!!!!!!!!!!!!
-    TG_ON = True
-    #  !!!!!!!!!!!!!!!!!!!!
+    if LOG_ON is False:
+        logging.disable(logging.INFO)
     try:
         if not all([
             os.getenv('BOT_TOKEN'),
@@ -261,10 +266,10 @@ def main():
     CHAT_ID = os.getenv('CHAT_ID')
     if TG_ON:
         bot = telegram.Bot(token=os.getenv('BOT_TOKEN'))
-    logging.info('Парсер запущен')
+    logging.critical('Парсер запущен')
     if TG_ON:
         bot.send_message(CHAT_ID, 'Парсер запущен')
-    logging.info('Инициализация серверной части')
+    logging.critical('Инициализация серверной части')
     if TG_ON:
         bot.send_message(CHAT_ID, 'Инициализация серверной части')
 
@@ -392,7 +397,7 @@ def main():
         sys.exit()
 
     msg = 'Старт бесконечного цикла серверной части'
-    logging.info(msg)
+    logging.critical(msg)
     if TG_ON:
         bot.send_message(CHAT_ID, msg)
 
@@ -427,7 +432,7 @@ def main():
                 try:
                     for attempt in Retrying(stop=stop_after_attempt(4), wait=wait_exponential(multiplier=5)):  # noqa
                         with attempt:
-                            logging.info(f'Начаты попытки получить ответ сервера сайта {item[1]}')  # noqa
+                            logging.info(f'Начаты попытки получить ответ сайта {item[1]}')  # noqa
                             from_server = get_response(item[3])
                 except Exception:
                     error_msg = f'Ахтунг, ошибка по ответу сайта {item[1]}, переходим к следующему'  # noqa
@@ -460,6 +465,7 @@ def main():
                     if result_new_data == result_old_data:
                         data_out += '\n Изменений нет.'
                         logging.info(f'По сайту {item[1]} изменений нет')
+                        results_storage[item[1]]['counter'] += 1
                     else:
                         data_out += '\n Есть изменения!'
                         if TG_ON:
@@ -472,6 +478,15 @@ def main():
                         # По сайт3, при изменениях его далее отслеживать не надо, до след.перезапуска программы  # noqa
                         if item[1] == os.getenv('SITE3_LABEL'):
                             item[5] = False
+
+                    # Если site3 проверяется уже непрерывно сутки, и изменений нет, доложим об этом  # noqa
+                    if item[1] == os.getenv('SITE3_LABEL') and item[0] * results_storage[item[1]]['counter'] >= datetime.timedelta(hours=24):  # noqa
+                        counter = results_storage[item[1]]['counter']
+                        msg = f'По сайту {item[1]} за последние сутки изменений нет, успешно загружен и распарсен {counter} раз'  # noqa
+                        if TG_ON:
+                            bot.send_message(CHAT_ID, msg)
+                        logging.info(msg)
+                        results_storage[item[1]]['counter'] = 0
 
                     results_storage[item[1]]['moment'] = now_moment
             else:
