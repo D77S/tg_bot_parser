@@ -164,7 +164,7 @@ def site33(TG_ON, bot: Bot, CHAT_ID, item):
     init_moment = datetime.now().astimezone()
     now_moment = init_moment
 
-    while counter_command < 1 or now_moment.time() < (init_moment.time() + timedelta(hours=23)):  # Повторяем запрос, пока не вернется, что есть хотя бы одна команда уже чья-то, или прошло 23ч  # noqa
+    while counter_command < 1 or now_moment < (init_moment + timedelta(hours=23)):  # Повторяем запрос, пока не вернется, что есть хотя бы одна команда уже чья-то, или прошло 23ч  # noqa
         params = {
             'RaidId': curr_mb_link_part.split('=')[1],
         }
